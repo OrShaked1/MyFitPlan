@@ -6,7 +6,7 @@ from datetime import datetime
 st.set_page_config(page_title="🍽️ הזנה יומית")
 
 st.header("🍽️ הוספת מזון ליומן")
-FOODS_FILE = "foods.csv"
+FOODS_FILE = "food_db.csv"
 LOG_FILE = "food_log.csv"
 
 CARB_UNIT = 20

@@ -6,6 +6,7 @@ import altair as alt
 
 st.set_page_config(page_title="📊 סיכומים")
 
+# 🗂️ פונקציית רענון היומן מול מאגר המזון
 def recalculate_food_log():
     db = pd.read_csv("food_db.csv")
     log = pd.read_csv("food_log.csv")
@@ -68,16 +69,17 @@ else:
         protein_goal = daily_goal["יעד חלבון (יח')"].values[0]
         fat_goal = daily_goal["יעד שומן (יח')"].values[0]
 
+        # ✅ כפתור רענון — מחוץ לבלוק ה־if
+        if st.button("🔄 רענון כל הערכים ביומן"):
+            recalculate_food_log()
+            st.success("✨ כל הערכים עודכנו מחדש לפי המאגר!")
+            st.experimental_rerun()
+
         # אחוזים
         carb_pct = min(100, max(0, (totals['Carb_units'] / carb_goal) * 100)) if carb_goal > 0 else 0
         protein_pct = min(100, max(0, (totals['Protein_units'] / protein_goal) * 100)) if protein_goal > 0 else 0
         fat_pct = min(100, max(0, (totals['Fat_units'] / fat_goal) * 100)) if fat_goal > 0 else 0
 
-        if st.button("🔄 רענון כל הערכים ביומן"):
-    recalculate_food_log()
-    st.success("✨ כל הערכים עודכנו מחדש לפי המאגר!")
-    st.experimental_rerun()
-        
         st.divider()
         st.markdown("### 🎯 השוואה ליעדים")
 
@@ -109,7 +111,6 @@ else:
 
         chart_df_melted = chart_df.melt("רכיב", var_name="סוג", value_name="יחידות")
 
-        # גרף עם ערכים ברורים
         bars = alt.Chart(chart_df_melted).mark_bar().encode(
             x=alt.X('רכיב:N', title="רכיב תזונתי"),
             y=alt.Y('יחידות:Q', title="יחידות"),

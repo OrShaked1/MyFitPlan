@@ -36,29 +36,26 @@ with st.form("add_food"):
         df.to_csv(FOODS_FILE, index=False)
         st.success(f"✅ נוסף {f}")
 
-# 📄 הצגת הטבלה
+# 📄 הצגת הטבלה עם כפתורי מחיקה
 st.divider()
-st.dataframe(df, use_container_width=True)
+st.subheader("📄 מאגר מזון קיים")
 
-# ✏️ עריכה
-if not df.empty:
-    st.subheader("✏️ ערוך מזון")
-    option = st.selectbox("בחר:", df["Food"].unique())
-    row = df[df["Food"] == option].iloc[0]
-    c = st.number_input("פחמימה", 0.0, value=row["Carb_per_100g"])
-    p = st.number_input("חלבון", 0.0, value=row["Protein_per_100g"])
-    fat = st.number_input("שומן", 0.0, value=row["Fat_per_100g"])
-    cal = st.number_input("קלוריות", 0.0, value=row["Calories_per_100g"])
-    if st.button("💾 עדכן"):
-        df.loc[df["Food"] == option, [
-            "Carb_per_100g",
-            "Protein_per_100g",
-            "Fat_per_100g",
-            "Calories_per_100g"
-        ]] = [c, p, fat, cal]
-        df.to_csv(FOODS_FILE, index=False)
-        st.success(f"✅ עודכן {option}")
-    if st.button("🗑️ מחק"):
-        df = df[df["Food"] != option]
-        df.to_csv(FOODS_FILE, index=False)
-        st.success(f"🗑️ נמחק {option}")
+if df.empty:
+    st.info("📂 המאגר עדיין ריק.")
+else:
+    for idx, row in df.iterrows():
+        col1, col2 = st.columns([8, 1])
+        with col1:
+            st.write(
+                f"{row['Food']} | 🍚 פחמ' {row['Carb_per_100g']} | "
+                f"🍗 חלבון {row['Protein_per_100g']} | 🥑 שומן {row['Fat_per_100g']} | "
+                f"🔥 קלוריות {row['Calories_per_100g']}"
+            )
+        with col2:
+            if st.button("🗑️ מחק", key=f"del_{idx}"):
+                df = df.drop(idx)
+                df.to_csv(FOODS_FILE, index=False)
+                st.success(f"🗑️ נמחק {row['Food']}")
+                st.rerun()
+
+# אם תרצי להשאיר גם בלוק עריכה רגיל — תשאירי מתחת או תורידי

@@ -5,7 +5,7 @@ import os
 st.set_page_config(page_title="📚 ניהול מאגר")
 
 st.header("📚 ניהול מאגר מזונות")
-FOODS_FILE = "foods.csv"
+FOODS_FILE = "food_db.csv"
 
 if os.path.exists(FOODS_FILE):
     df = pd.read_csv(FOODS_FILE)

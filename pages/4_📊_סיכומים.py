@@ -6,6 +6,28 @@ import altair as alt
 
 st.set_page_config(page_title="📊 סיכומים")
 
+def recalculate_food_log():
+    db = pd.read_csv("food_db.csv")
+    log = pd.read_csv("food_log.csv")
+
+    for index, row in log.iterrows():
+        food_name = row["Food"]
+        grams = row["Grams"]
+        food_row = db[db["Food"] == food_name]
+
+        if not food_row.empty:
+            carb = food_row["Carb_per_100g"].values[0] * grams / 100 / 20
+            protein = food_row["Protein_per_100g"].values[0] * grams / 100 / 25
+            fat = food_row["Fat_per_100g"].values[0] * grams / 100 / 10
+            cal = food_row["Calories_per_100g"].values[0] * grams / 100
+
+            log.loc[index, "Carb_units"] = carb
+            log.loc[index, "Protein_units"] = protein
+            log.loc[index, "Fat_units"] = fat
+            log.loc[index, "Calories"] = cal
+
+    log.to_csv("food_log.csv", index=False)
+
 st.header("📊 סיכום והשוואה ליעדים")
 
 LOG_FILE = "food_log.csv"
@@ -51,6 +73,11 @@ else:
         protein_pct = min(100, max(0, (totals['Protein_units'] / protein_goal) * 100)) if protein_goal > 0 else 0
         fat_pct = min(100, max(0, (totals['Fat_units'] / fat_goal) * 100)) if fat_goal > 0 else 0
 
+        if st.button("🔄 רענון כל הערכים ביומן"):
+    recalculate_food_log()
+    st.success("✨ כל הערכים עודכנו מחדש לפי המאגר!")
+    st.experimental_rerun()
+        
         st.divider()
         st.markdown("### 🎯 השוואה ליעדים")
 

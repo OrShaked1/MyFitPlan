@@ -36,6 +36,10 @@ with st.form("add_food"):
         df.to_csv(FOODS_FILE, index=False)
         st.success(f"✅ נוסף {f}")
 
+# 📄 הצגת הטבלה
+st.divider()
+st.dataframe(df, use_container_width=True)
+
 # ✏️ עריכה
 if not df.empty:
     st.subheader("✏️ ערוך מזון")
@@ -58,7 +62,3 @@ if not df.empty:
         df = df[df["Food"] != option]
         df.to_csv(FOODS_FILE, index=False)
         st.success(f"🗑️ נמחק {option}")
-
-# 📄 הצגת הטבלה
-st.divider()
-st.dataframe(df, use_container_width=True)

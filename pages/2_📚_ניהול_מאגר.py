@@ -36,26 +36,22 @@ with st.form("add_food"):
         df.to_csv(FOODS_FILE, index=False)
         st.success(f"✅ נוסף {f}")
 
-# 📄 הצגת הטבלה עם כפתורי מחיקה
+# 📄 הצגת הטבלה
 st.divider()
 st.subheader("📄 מאגר מזון קיים")
 
 if df.empty:
     st.info("📂 המאגר עדיין ריק.")
 else:
-    for idx, row in df.iterrows():
-        col1, col2 = st.columns([8, 1])
-        with col1:
-            st.write(
-                f"{row['Food']} | 🍚 פחמ' {row['Carb_per_100g']} | "
-                f"🍗 חלבון {row['Protein_per_100g']} | 🥑 שומן {row['Fat_per_100g']} | "
-                f"🔥 קלוריות {row['Calories_per_100g']}"
-            )
-        with col2:
-            if st.button("🗑️ מחק", key=f"del_{idx}"):
-                df = df.drop(idx)
-                df.to_csv(FOODS_FILE, index=False)
-                st.success(f"🗑️ נמחק {row['Food']}")
-                st.rerun()
+    st.dataframe(df, use_container_width=True)
 
-# אם תרצי להשאיר גם בלוק עריכה רגיל — תשאירי מתחת או תורידי
+    st.divider()
+    st.subheader("🗑️ מחיקת פריט מהמאגר")
+
+    # ממשק בחירה ומחיקה בטבלה
+    option = st.selectbox("בחרי פריט למחיקה:", df["Food"].unique())
+    if st.button("🗑️ מחק פריט"):
+        df = df[df["Food"] != option]
+        df.to_csv(FOODS_FILE, index=False)
+        st.success(f"🗑️ נמחק {option}")
+        st.rerun()

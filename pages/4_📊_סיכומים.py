@@ -73,7 +73,7 @@ else:
         if st.button("🔄 רענון כל הערכים ביומן"):
             recalculate_food_log()
             st.success("✨ כל הערכים עודכנו מחדש לפי המאגר!")
-            st.experimental_rerun()
+            st.rerun()
 
         # אחוזים
         carb_pct = min(100, max(0, (totals['Carb_units'] / carb_goal) * 100)) if carb_goal > 0 else 0

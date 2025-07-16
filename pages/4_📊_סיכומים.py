@@ -1,84 +1,92 @@
 import streamlit as st
 import pandas as pd
-import os
+import psycopg2
 from datetime import datetime
 import altair as alt
+import os
 
 st.set_page_config(page_title="📊 סיכומים")
 
-# 🗂️ פונקציית רענון היומן מול מאגר המזון
-def recalculate_food_log():
-    db = pd.read_csv("food_db.csv")
-    log = pd.read_csv("food_log.csv")
+# 🗂️ הגדרות חיבור
+SUPABASE_HOST = "db.ifykewhyhxkyffvnfblm.supabase.co"
+SUPABASE_DB = "postgres"
+SUPABASE_USER = "postgres"
+SUPABASE_PASSWORD = os.getenv("SUPABASE_PASSWORD")
+SUPABASE_PORT = 5432
 
-    for index, row in log.iterrows():
-        food_name = row["Food"]
-        grams = row["Grams"]
-        food_row = db[db["Food"] == food_name]
-
-        if not food_row.empty:
-            carb = food_row["Carb_per_100g"].values[0] * grams / 100 / 20
-            protein = food_row["Protein_per_100g"].values[0] * grams / 100 / 25
-            fat = food_row["Fat_per_100g"].values[0] * grams / 100 / 10
-            cal = food_row["Calories_per_100g"].values[0] * grams / 100
-
-            log.loc[index, "Carb_units"] = carb
-            log.loc[index, "Protein_units"] = protein
-            log.loc[index, "Fat_units"] = fat
-            log.loc[index, "Calories"] = cal
-
-    log.to_csv("food_log.csv", index=False)
+conn = psycopg2.connect(
+    host=SUPABASE_HOST,
+    database=SUPABASE_DB,
+    user=SUPABASE_USER,
+    password=SUPABASE_PASSWORD,
+    port=SUPABASE_PORT
+)
+cur = conn.cursor()
 
 st.header("📊 סיכום והשוואה ליעדים")
 
-LOG_FILE = "food_log.csv"
-GOALS_FILE = "goals_by_date.csv"
+# 🗂️ רענון יומן: עדכון ערכים לפי מאגר המזון
+def recalculate_food_log():
+    food_db = pd.read_sql("SELECT * FROM food_db;", conn)
+    food_log = pd.read_sql("SELECT * FROM food_log;", conn)
 
-# טען יומן
-if os.path.exists(LOG_FILE):
-    log_df = pd.read_csv(LOG_FILE)
-else:
-    st.warning("⚠️ אין יומן אכילה.")
-    st.stop()
+    for index, row in food_log.iterrows():
+        food_name = row["food"]
+        grams = row["grams"]
+        food_row = food_db[food_db["food"] == food_name]
 
-# טען יעדים
-if os.path.exists(GOALS_FILE):
-    goals_df = pd.read_csv(GOALS_FILE)
-else:
-    st.warning("⚠️ לא הוגדרו יעדים.")
-    st.stop()
+        if not food_row.empty:
+            carb = food_row["carb_per_100g"].values[0] * grams / 100 / 20
+            protein = food_row["protein_per_100g"].values[0] * grams / 100 / 25
+            fat = food_row["fat_per_100g"].values[0] * grams / 100 / 10
+            cal = food_row["calories_per_100g"].values[0] * grams / 100
 
-# בחר תאריך
+            update_query = """
+                UPDATE food_log
+                SET carb_units = %s,
+                    protein_units = %s,
+                    fat_units = %s,
+                    calories = %s
+                WHERE id = %s;
+            """
+            cur.execute(update_query, (carb, protein, fat, cal, row['id']))
+
+    conn.commit()
+
+# 📌 בחירת תאריך לסיכום
 selected_date = st.date_input("בחרי תאריך לסיכום:", datetime.today())
 date_str = selected_date.strftime('%Y-%m-%d')
 
-daily_log = log_df[log_df["Date"] == date_str]
-daily_goal = goals_df[goals_df["תאריך"] == date_str]
+daily_log = pd.read_sql(f"SELECT * FROM food_log WHERE date = '{date_str}';", conn)
+daily_goal = pd.read_sql(f"SELECT * FROM goals_by_date WHERE date = '{date_str}';", conn)
 
 if daily_log.empty:
     st.info("🙋‍♀️ אין רשומות ביומן לתאריך זה.")
 else:
     st.subheader(f"📅 סיכום עבור {date_str}")
 
-    st.dataframe(daily_log[["Food", "Grams", "Carb_units", "Protein_units", "Fat_units", "Calories"]])
+    st.dataframe(
+        daily_log[["food", "grams", "carb_units", "protein_units", "fat_units", "calories"]],
+        use_container_width=True
+    )
 
-    totals = daily_log[["Carb_units", "Protein_units", "Fat_units", "Calories"]].sum()
+    totals = daily_log[["carb_units", "protein_units", "fat_units", "calories"]].sum()
 
     if not daily_goal.empty:
-        carb_goal = daily_goal["יעד פחמימה (יח')"].values[0]
-        protein_goal = daily_goal["יעד חלבון (יח')"].values[0]
-        fat_goal = daily_goal["יעד שומן (יח')"].values[0]
+        carb_goal = daily_goal["carb_goal"].values[0]
+        protein_goal = daily_goal["protein_goal"].values[0]
+        fat_goal = daily_goal["fat_goal"].values[0]
 
-        # ✅ כפתור רענון — מחוץ לבלוק ה־if
+        # ✅ כפתור רענון
         if st.button("🔄 רענון כל הערכים ביומן"):
             recalculate_food_log()
             st.success("✨ כל הערכים עודכנו מחדש לפי המאגר!")
-            st.rerun()
+            st.experimental_rerun()
 
         # אחוזים
-        carb_pct = min(100, max(0, (totals['Carb_units'] / carb_goal) * 100)) if carb_goal > 0 else 0
-        protein_pct = min(100, max(0, (totals['Protein_units'] / protein_goal) * 100)) if protein_goal > 0 else 0
-        fat_pct = min(100, max(0, (totals['Fat_units'] / fat_goal) * 100)) if fat_goal > 0 else 0
+        carb_pct = min(100, max(0, (totals['carb_units'] / carb_goal) * 100)) if carb_goal > 0 else 0
+        protein_pct = min(100, max(0, (totals['protein_units'] / protein_goal) * 100)) if protein_goal > 0 else 0
+        fat_pct = min(100, max(0, (totals['fat_units'] / fat_goal) * 100)) if fat_goal > 0 else 0
 
         st.divider()
         st.markdown("### 🎯 השוואה ליעדים")
@@ -86,26 +94,26 @@ else:
         col1, col2, col3 = st.columns(1) if st.session_state.get('is_mobile') else st.columns(3)
 
         with col1:
-            st.metric("🥖 פחמימה", f"{totals['Carb_units']:.2f} יח׳", f"{totals['Carb_units'] - carb_goal:+.2f} יח׳")
+            st.metric("🥖 פחמימה", f"{totals['carb_units']:.2f} יח׳", f"{totals['carb_units'] - carb_goal:+.2f} יח׳")
             st.progress(carb_pct / 100, text=f"{carb_pct:.0f}% מהיעד")
 
         with col2:
-            st.metric("🍗 חלבון", f"{totals['Protein_units']:.2f} יח׳", f"{totals['Protein_units'] - protein_goal:+.2f} יח׳")
+            st.metric("🍗 חלבון", f"{totals['protein_units']:.2f} יח׳", f"{totals['protein_units'] - protein_goal:+.2f} יח׳")
             st.progress(protein_pct / 100, text=f"{protein_pct:.0f}% מהיעד")
 
         with col3:
-            st.metric("🥑 שומן", f"{totals['Fat_units']:.2f} יח׳", f"{totals['Fat_units'] - fat_goal:+.2f} יח׳")
+            st.metric("🥑 שומן", f"{totals['fat_units']:.2f} יח׳", f"{totals['fat_units'] - fat_goal:+.2f} יח׳")
             st.progress(fat_pct / 100, text=f"{fat_pct:.0f}% מהיעד")
 
-        st.info(f"🔥 סה\"כ קלוריות: {totals['Calories']:.0f} קק\"ל")
+        st.info(f"🔥 סה\"כ קלוריות: {totals['calories']:.0f} קק\"ל")
 
-        # גרף השוואה
+        # גרף
         st.divider()
         st.markdown("### 📊 גרף השוואת יעד מול בפועל")
 
         chart_df = pd.DataFrame({
             "רכיב": ["פחמימה", "חלבון", "שומן"],
-            "בפועל": [totals['Carb_units'], totals['Protein_units'], totals['Fat_units']],
+            "בפועל": [totals['carb_units'], totals['protein_units'], totals['fat_units']],
             "יעד": [carb_goal, protein_goal, fat_goal]
         })
 
@@ -137,3 +145,6 @@ else:
 
     else:
         st.warning("⚠️ לא הוגדר יעד עבור תאריך זה.")
+
+cur.close()
+conn.close()

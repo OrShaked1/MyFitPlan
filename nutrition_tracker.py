@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
-import os
+import psycopg2
 from datetime import datetime
+import os
 
 st.set_page_config(
     page_title="🏠 דף הבית - MyFirstApp",
@@ -10,69 +11,76 @@ st.set_page_config(
 
 st.title("🏠 דף הבית")
 
+# פרטי חיבור מה-Environment (אל תכתבי סיסמה ישירות בקוד!)
+SUPABASE_HOST = "db.ifykewhyhxkyffvnfblm.supabase.co"
+SUPABASE_DB = "postgres"
+SUPABASE_USER = "postgres"
+SUPABASE_PASSWORD = os.getenv("SUPABASE_PASSWORD")
+SUPABASE_PORT = 5432
+
+# יצירת חיבור
+conn = psycopg2.connect(
+    host=SUPABASE_HOST,
+    database=SUPABASE_DB,
+    user=SUPABASE_USER,
+    password=SUPABASE_PASSWORD,
+    port=SUPABASE_PORT
+)
+
 today_str = datetime.today().strftime('%Y-%m-%d')
 
-LOG_FILE = "food_log.csv"
-GOALS_FILE = "goals_by_date.csv"
+# קריאה מהיומן
+log_query = f"SELECT * FROM food_log WHERE date = '{today_str}';"
+log_df = pd.read_sql(log_query, conn)
 
-# יומן
-if os.path.exists(LOG_FILE):
-    log_df = pd.read_csv(LOG_FILE)
-    daily_log = log_df[log_df["Date"] == today_str]
-else:
-    daily_log = pd.DataFrame()
+# קריאה מהיעדים
+goals_query = f"SELECT * FROM goals_by_date WHERE date = '{today_str}';"
+goals_df = pd.read_sql(goals_query, conn)
 
-# יעדים
-if os.path.exists(GOALS_FILE):
-    goals_df = pd.read_csv(GOALS_FILE)
-    daily_goal = goals_df[goals_df["תאריך"] == today_str]
-else:
-    daily_goal = pd.DataFrame()
+conn.close()
 
 st.markdown(f"### 📅 היום: `{today_str}`")
 
-if daily_log.empty:
+if log_df.empty:
     st.info("🙋‍♀️ עוד לא הוזנו פריטים ליומן היום.")
 else:
-    totals = daily_log[["Carb_units", "Protein_units", "Fat_units", "Calories"]].sum()
+    totals = log_df[["carb_units", "protein_units", "fat_units", "calories"]].sum()
 
-    if not daily_goal.empty:
-        carb_goal = daily_goal['יעד פחמימה (יח\')'].values[0]
-        protein_goal = daily_goal['יעד חלבון (יח\')'].values[0]
-        fat_goal = daily_goal['יעד שומן (יח\')'].values[0]
+    if not goals_df.empty:
+        carb_goal = goals_df['carb_goal'].values[0]
+        protein_goal = goals_df['protein_goal'].values[0]
+        fat_goal = goals_df['fat_goal'].values[0]
 
         st.divider()
         st.markdown("### 🎯 מצב לפי רכיב")
 
-        # חישוב אחוזים בבטיחות
-        carb_pct = min(100, max(0, (totals['Carb_units'] / carb_goal) * 100)) if carb_goal > 0 else 0
-        protein_pct = min(100, max(0, (totals['Protein_units'] / protein_goal) * 100)) if protein_goal > 0 else 0
-        fat_pct = min(100, max(0, (totals['Fat_units'] / fat_goal) * 100)) if fat_goal > 0 else 0
+        carb_pct = min(100, max(0, (totals['carb_units'] / carb_goal) * 100)) if carb_goal > 0 else 0
+        protein_pct = min(100, max(0, (totals['protein_units'] / protein_goal) * 100)) if protein_goal > 0 else 0
+        fat_pct = min(100, max(0, (totals['fat_units'] / fat_goal) * 100)) if fat_goal > 0 else 0
 
         col1, col2, col3 = st.columns(1) if st.session_state.get('is_mobile') else st.columns(3)
 
         with col1:
             st.markdown("### 🥖 פחמימה")
-            st.metric("בפועל", f"{totals['Carb_units']:.2f} יח׳", f"{totals['Carb_units'] - carb_goal:+.2f} יח׳")
+            st.metric("בפועל", f"{totals['carb_units']:.2f} יח׳", f"{totals['carb_units'] - carb_goal:+.2f} יח׳")
             st.caption(f"🎯 יעד: {carb_goal:.2f} יח׳")
             st.progress(carb_pct / 100, text=f"{carb_pct:.0f}% מהיעד")
 
         with col2:
             st.markdown("### 🍗 חלבון")
-            st.metric("בפועל", f"{totals['Protein_units']:.2f} יח׳", f"{totals['Protein_units'] - protein_goal:+.2f} יח׳")
+            st.metric("בפועל", f"{totals['protein_units']:.2f} יח׳", f"{totals['protein_units'] - protein_goal:+.2f} יח׳")
             st.caption(f"🎯 יעד: {protein_goal:.2f} יח׳")
             st.progress(protein_pct / 100, text=f"{protein_pct:.0f}% מהיעד")
 
         with col3:
             st.markdown("### 🥑 שומן")
-            st.metric("בפועל", f"{totals['Fat_units']:.2f} יח׳", f"{totals['Fat_units'] - fat_goal:+.2f} יח׳")
+            st.metric("בפועל", f"{totals['fat_units']:.2f} יח׳", f"{totals['fat_units'] - fat_goal:+.2f} יח׳")
             st.caption(f"🎯 יעד: {fat_goal:.2f} יח׳")
             st.progress(fat_pct / 100, text=f"{fat_pct:.0f}% מהיעד")
 
         st.divider()
         st.subheader("🔥 סה\"כ קלוריות היום")
-        st.info(f"{totals['Calories']:.0f} קק\"ל")
+        st.info(f"{totals['calories']:.0f} קק\"ל")
 
     else:
         st.warning("⚠️ לא הוגדר יעד עבור היום.")
-

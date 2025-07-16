@@ -1,80 +1,89 @@
 import streamlit as st
 import pandas as pd
-import os
+import psycopg2
 from datetime import datetime
+import os
 
 st.set_page_config(page_title="🍽️ הזנה יומית")
 
 st.header("🍽️ הוספת מזון ליומן")
-FOODS_FILE = "food_db.csv"
-LOG_FILE = "food_log.csv"
 
 CARB_UNIT = 20
 PROTEIN_UNIT = 25
 FAT_UNIT = 10
 
-# טען מאגר מזונות
-if os.path.exists(FOODS_FILE):
-    foods_df = pd.read_csv(FOODS_FILE)
-else:
+# פרטי החיבור שלך (שימי את הסיסמה כ-Environment Variable!)
+SUPABASE_HOST = "db.ifykewhyhxkyffvnfblm.supabase.co"
+SUPABASE_DB = "postgres"
+SUPABASE_USER = "postgres"
+SUPABASE_PASSWORD = os.getenv("SUPABASE_PASSWORD")
+SUPABASE_PORT = 5432
+
+conn = psycopg2.connect(
+    host=SUPABASE_HOST,
+    database=SUPABASE_DB,
+    user=SUPABASE_USER,
+    password=SUPABASE_PASSWORD,
+    port=SUPABASE_PORT
+)
+cur = conn.cursor()
+
+# 📌 קריאה ממאגר המזונות
+foods_df = pd.read_sql("SELECT * FROM food_db;", conn)
+
+if foods_df.empty:
     st.warning("⚠️ אין מאגר מזונות.")
     st.stop()
 
-# טען יומן אכילה
-if os.path.exists(LOG_FILE):
-    log_df = pd.read_csv(LOG_FILE)
-else:
-    log_df = pd.DataFrame(columns=[
-        "Date","Food","Grams","Carb_g","Protein_g","Fat_g",
-        "Carb_units","Protein_units","Fat_units","Calories"
-    ])
-    log_df.to_csv(LOG_FILE, index=False)
-
 # 📌 טופס הזנה
 with st.form("log_food"):
-    f = st.selectbox("מזון:", foods_df["Food"].unique())
+    f = st.selectbox("מזון:", foods_df["food"].unique())
     g = st.number_input("גרם:", 0.0)
     if st.form_submit_button("➕ הוסף ליומן"):
-        row = foods_df[foods_df["Food"] == f].iloc[0]
-        carb = g * row["Carb_per_100g"] / 100
-        pro = g * row["Protein_per_100g"] / 100
-        fat = g * row["Fat_per_100g"] / 100
+        row = foods_df[foods_df["food"] == f].iloc[0]
+        carb = g * row["carb_per_100g"] / 100
+        pro = g * row["protein_per_100g"] / 100
+        fat = g * row["fat_per_100g"] / 100
         cal = carb * 4 + pro * 4 + fat * 9
 
-        new_row = pd.DataFrame([[
+        # הוספה ליומן ב-DB
+        insert_query = """
+            INSERT INTO food_log
+            (date, food, grams, carb_g, protein_g, fat_g, carb_units, protein_units, fat_units, calories)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+        """
+        cur.execute(insert_query, (
             datetime.today().strftime('%Y-%m-%d'),
             f, g, carb, pro, fat,
-            carb / CARB_UNIT, pro / PROTEIN_UNIT, fat / FAT_UNIT,
+            carb / CARB_UNIT,
+            pro / PROTEIN_UNIT,
+            fat / FAT_UNIT,
             cal
-        ]], columns=log_df.columns)
-
-        log_df = pd.concat([log_df, new_row], ignore_index=True)
-        log_df.to_csv(LOG_FILE, index=False)
+        ))
+        conn.commit()
         st.success(f"✅ נוסף {f}!")
 
 # 📌 סיכום יומי והמחיקה
 st.header("📋 מה הזנתי היום")
 
 today_str = datetime.today().strftime('%Y-%m-%d')
-daily_log = log_df[log_df["Date"] == today_str]
+daily_log = pd.read_sql(f"SELECT * FROM food_log WHERE date = '{today_str}';", conn)
 
 if daily_log.empty:
     st.info("🙋‍♀️ לא הוזנו פריטים היום עדיין.")
 else:
-    # טבלה עם סיכום
     st.dataframe(
-        daily_log[["Food","Grams","Carb_units","Protein_units","Fat_units","Calories"]],
+        daily_log[["food","grams","carb_units","protein_units","fat_units","calories"]],
         use_container_width=True
     )
 
-    # סיכום כולל
-    totals = daily_log[["Carb_units","Protein_units","Fat_units","Calories"]].sum()
+    totals = daily_log[["carb_units","protein_units","fat_units","calories"]].sum()
     st.write(
         f"🔢 סה\"כ עד כה: "
-        f"🥖 פחמימה {totals['Carb_units']:.2f} | "
-        f"🍗 חלבון {totals['Protein_units']:.2f} | "
-        f"🥑 שומן {totals['Fat_units']:.2f} | "
-        f"🔥 קלוריות {totals['Calories']:.0f}"
+        f"🥖 פחמימה {totals['carb_units']:.2f} | "
+        f"🍗 חלבון {totals['protein_units']:.2f} | "
+        f"🥑 שומן {totals['fat_units']:.2f} | "
+        f"🔥 קלוריות {totals['calories']:.0f}"
     )
 
     st.divider()
@@ -84,16 +93,19 @@ else:
         col1, col2 = st.columns([8, 1])
         with col1:
             st.write(
-                f"{row['Food']} - {row['Grams']} גרם | "
-                f"🥖 {row['Carb_units']:.2f} יח׳ | "
-                f"🍗 {row['Protein_units']:.2f} יח׳ | "
-                f"🥑 {row['Fat_units']:.2f} יח׳ | "
-                f"🔥 {row['Calories']:.0f} קק\"ל"
+                f"{row['food']} - {row['grams']} גרם | "
+                f"🥖 {row['carb_units']:.2f} יח׳ | "
+                f"🍗 {row['protein_units']:.2f} יח׳ | "
+                f"🥑 {row['fat_units']:.2f} יח׳ | "
+                f"🔥 {row['calories']:.0f} קק\"ל"
             )
         with col2:
             if st.button("🗑️ מחק", key=f"del_{idx}"):
-                log_df = log_df.drop(idx)
-                log_df.to_csv(LOG_FILE, index=False)
-                st.success(f"✅ נמחק {row['Food']}")
-                st.rerun()
+                delete_query = "DELETE FROM food_log WHERE id = %s;"
+                cur.execute(delete_query, (row['id'],))
+                conn.commit()
+                st.success(f"✅ נמחק {row['food']}")
+                st.experimental_rerun()
 
+cur.close()
+conn.close()

@@ -1,24 +1,31 @@
 import streamlit as st
 import pandas as pd
+import psycopg2
 import os
 
 st.set_page_config(page_title="📚 ניהול מאגר")
 
 st.header("📚 ניהול מאגר מזונות")
-FOODS_FILE = "food_db.csv"
 
-# טען או צור את הקובץ
-if os.path.exists(FOODS_FILE):
-    df = pd.read_csv(FOODS_FILE)
-else:
-    df = pd.DataFrame(columns=[
-        "Food",
-        "Carb_per_100g",
-        "Protein_per_100g",
-        "Fat_per_100g",
-        "Calories_per_100g"
-    ])
-    df.to_csv(FOODS_FILE, index=False)
+# פרטי חיבור
+SUPABASE_HOST = "db.ifykewhyhxkyffvnfblm.supabase.co"
+SUPABASE_DB = "postgres"
+SUPABASE_USER = "postgres"
+SUPABASE_PASSWORD = os.getenv("SUPABASE_PASSWORD")
+SUPABASE_PORT = 5432
+
+# יצירת חיבור למסד הנתונים
+conn = psycopg2.connect(
+    host=SUPABASE_HOST,
+    database=SUPABASE_DB,
+    user=SUPABASE_USER,
+    password=SUPABASE_PASSWORD,
+    port=SUPABASE_PORT
+)
+cur = conn.cursor()
+
+# טען את המאגר
+df = pd.read_sql("SELECT * FROM food_db ORDER BY food;", conn)
 
 # ➕ הוספה
 with st.form("add_food"):
@@ -29,14 +36,16 @@ with st.form("add_food"):
     fat = st.number_input("שומן/100 גרם", 0.0)
     cal = st.number_input("קלוריות/100 גרם", 0.0)
     if st.form_submit_button("💾 שמור"):
-        df = pd.concat(
-            [df, pd.DataFrame([[f, c, p, fat, cal]], columns=df.columns)],
-            ignore_index=True
-        )
-        df.to_csv(FOODS_FILE, index=False)
+        insert_query = """
+            INSERT INTO food_db (food, carb_per_100g, protein_per_100g, fat_per_100g, calories_per_100g)
+            VALUES (%s, %s, %s, %s, %s)
+        """
+        cur.execute(insert_query, (f, c, p, fat, cal))
+        conn.commit()
         st.success(f"✅ נוסף {f}")
+        st.experimental_rerun()
 
-# 📄 הצגת הטבלה
+# 📄 הצגת המאגר
 st.divider()
 st.subheader("📄 מאגר מזון קיים")
 
@@ -48,10 +57,14 @@ else:
     st.divider()
     st.subheader("🗑️ מחיקת פריט מהמאגר")
 
-    # ממשק בחירה ומחיקה בטבלה
-    option = st.selectbox("בחרי פריט למחיקה:", df["Food"].unique())
+    option = st.selectbox("בחרי פריט למחיקה:", df["food"].unique())
     if st.button("🗑️ מחק פריט"):
-        df = df[df["Food"] != option]
-        df.to_csv(FOODS_FILE, index=False)
+        delete_query = "DELETE FROM food_db WHERE food = %s"
+        cur.execute(delete_query, (option,))
+        conn.commit()
         st.success(f"🗑️ נמחק {option}")
-        st.rerun()
+        st.experimental_rerun()
+
+# סגירת החיבורים
+cur.close()
+conn.close()

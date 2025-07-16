@@ -1,20 +1,32 @@
 import streamlit as st
 import pandas as pd
-import os
+import psycopg2
 from datetime import datetime
+import os
 
 st.set_page_config(page_title="📅 ניהול יעדים")
 
 st.header("📅 הגדרת יעדים לפי תאריכים")
 
-GOALS_FILE = "goals_by_date.csv"
+# פרטי חיבור ל-Supabase
+SUPABASE_HOST = "db.ifykewhyhxkyffvnfblm.supabase.co"
+SUPABASE_DB = "postgres"
+SUPABASE_USER = "postgres"
+SUPABASE_PASSWORD = os.getenv("SUPABASE_PASSWORD")
+SUPABASE_PORT = 5432
 
-# קובץ יעד
-if os.path.exists(GOALS_FILE):
-    goals_df = pd.read_csv(GOALS_FILE)
-else:
-    goals_df = pd.DataFrame(columns=["תאריך", "יעד פחמימה (יח')", "יעד חלבון (יח')", "יעד שומן (יח')"])
-    goals_df.to_csv(GOALS_FILE, index=False)
+# יצירת חיבור
+conn = psycopg2.connect(
+    host=SUPABASE_HOST,
+    database=SUPABASE_DB,
+    user=SUPABASE_USER,
+    password=SUPABASE_PASSWORD,
+    port=SUPABASE_PORT
+)
+cur = conn.cursor()
+
+# קריאת טבלת היעדים
+goals_df = pd.read_sql("SELECT * FROM goals_by_date ORDER BY date;", conn)
 
 # טופס הוספה/עדכון יעד
 with st.form("date_goals_form"):
@@ -26,16 +38,32 @@ with st.form("date_goals_form"):
 
     if save_goal:
         date_str = goal_date.strftime('%Y-%m-%d')
-        if date_str in goals_df["תאריך"].values:
-            goals_df.loc[goals_df["תאריך"] == date_str,
-                         ["יעד פחמימה (יח')", "יעד חלבון (יח')", "יעד שומן (יח')"]] = [carb_goal, protein_goal, fat_goal]
+        if date_str in goals_df["date"].values:
+            update_query = """
+                UPDATE goals_by_date
+                SET carb_goal = %s, protein_goal = %s, fat_goal = %s
+                WHERE date = %s;
+            """
+            cur.execute(update_query, (carb_goal, protein_goal, fat_goal, date_str))
+            conn.commit()
             st.success(f"✅ יעד עודכן עבור {date_str}")
         else:
-            new_row = pd.DataFrame([[date_str, carb_goal, protein_goal, fat_goal]], columns=goals_df.columns)
-            goals_df = pd.concat([goals_df, new_row], ignore_index=True)
+            insert_query = """
+                INSERT INTO goals_by_date (date, carb_goal, protein_goal, fat_goal)
+                VALUES (%s, %s, %s, %s);
+            """
+            cur.execute(insert_query, (date_str, carb_goal, protein_goal, fat_goal))
+            conn.commit()
             st.success(f"✅ יעד נוסף עבור {date_str}")
-        goals_df.to_csv(GOALS_FILE, index=False)
+
+        st.experimental_rerun()
 
 # טבלת יעדים קיימים
 st.subheader("📋 טבלת היעדים הקיימת")
-st.dataframe(goals_df)
+if goals_df.empty:
+    st.info("⚠️ אין יעדים מוגדרים עדיין.")
+else:
+    st.dataframe(goals_df, use_container_width=True)
+
+cur.close()
+conn.close()

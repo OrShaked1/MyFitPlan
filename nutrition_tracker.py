@@ -23,6 +23,8 @@ SUPABASE_PORT = int(st.secrets["SUPABASE_PORT"])
 st.write("HOST:", SUPABASE_HOST)
 st.write("USER:", SUPABASE_USER)
 st.write("PASSWORD IS NONE?", SUPABASE_PASSWORD is None)
+st.write(f"postgresql://{SUPABASE_USER}:{SUPABASE_PASSWORD}@{SUPABASE_HOST}:{SUPABASE_PORT}/{SUPABASE_DB}")
+
 
 # יצירת חיבור
 conn = psycopg2.connect(

@@ -12,11 +12,11 @@ st.set_page_config(
 st.title("🏠 דף הבית")
 
 # פרטי חיבור מה-Environment (אל תכתבי סיסמה ישירות בקוד!)
-SUPABASE_HOST = "db.ifykewhyhxkyffvnfblm.supabase.co"
-SUPABASE_DB = "postgres"
-SUPABASE_USER = "postgres"
-SUPABASE_PASSWORD = os.getenv("SUPABASE_PASSWORD")
-SUPABASE_PORT = 5432
+SUPABASE_HOST = st.secrets["SUPABASE_HOST"]
+SUPABASE_DB = st.secrets["SUPABASE_DB"]
+SUPABASE_USER = st.secrets["SUPABASE_USER"]
+SUPABASE_PASSWORD = st.secrets["SUPABASE_PASSWORD"]
+SUPABASE_PORT = st.secrets["SUPABASE_PORT"]
 
 # יצירת חיבור
 conn = psycopg2.connect(

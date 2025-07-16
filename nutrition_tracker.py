@@ -16,7 +16,7 @@ SUPABASE_HOST = st.secrets["SUPABASE_HOST"]
 SUPABASE_DB = st.secrets["SUPABASE_DB"]
 SUPABASE_USER = st.secrets["SUPABASE_USER"]
 SUPABASE_PASSWORD = st.secrets["SUPABASE_PASSWORD"]
-SUPABASE_PORT = st.secrets["SUPABASE_PORT"]
+SUPABASE_PORT = int(st.secrets["SUPABASE_PORT"])
 
 # יצירת חיבור
 conn = psycopg2.connect(
